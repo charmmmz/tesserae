@@ -84,26 +84,8 @@ def _resolve_art(core: Any, raw: str) -> str | None:
     return f"{base}{sep}{raw}"
 
 
-def fetch(
-    options: dict[str, Any], settings: dict[str, Any], *, ctx: dict[str, Any]
-) -> dict[str, Any]:
-    del settings, ctx
-    core = _core()
-    if core is None:
-        return {"error": "Install the Home Assistant Core plugin to use this widget."}
-
-    entity_id = (options.get("entity_id") or "").strip()
-    if not entity_id:
-        return {"error": "Set a media_player entity in the cell options."}
-
-    try:
-        st = core.get_state(entity_id)
-    except Exception as err:
-        return {"error": core.coerce_error(err)}
-
-    if not st:
-        return {"error": f"Entity {entity_id} not found."}
-
+def shape_media_state(core: Any, entity_id: str, st: dict[str, Any]) -> dict[str, Any]:
+    """Normalize one HA media_player state for ha_media-style clients."""
     attrs = st.get("attributes") or {}
     state = str(st.get("state") or "").lower()
     # HA's media_player domain reports state as one of:
@@ -138,3 +120,26 @@ def fetch(
         "media_duration": duration,
         "position_pct": round(pct, 1) if pct is not None else None,
     }
+
+
+def fetch(
+    options: dict[str, Any], settings: dict[str, Any], *, ctx: dict[str, Any]
+) -> dict[str, Any]:
+    del settings, ctx
+    core = _core()
+    if core is None:
+        return {"error": "Install the Home Assistant Core plugin to use this widget."}
+
+    entity_id = (options.get("entity_id") or "").strip()
+    if not entity_id:
+        return {"error": "Set a media_player entity in the cell options."}
+
+    try:
+        st = core.get_state(entity_id)
+    except Exception as err:
+        return {"error": core.coerce_error(err)}
+
+    if not st:
+        return {"error": f"Entity {entity_id} not found."}
+
+    return shape_media_state(core, entity_id, st)
