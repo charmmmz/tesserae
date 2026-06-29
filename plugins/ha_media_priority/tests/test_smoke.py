@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
+import textwrap
+from pathlib import Path
+
+import pytest
 from flask import Flask
+
+
+ROOT = Path(__file__).resolve().parents[3]
 
 
 _STATES = [
@@ -202,4 +212,71 @@ def test_sample_payload_exists() -> None:
 def test_composer_mounts_widget(client) -> None:
     resp = client.get("/_test/render?plugin=ha_media_priority&size=md&sample=1")
     assert resp.status_code == 200
-    assert 'data-plugin="ha_media_priority"' in resp.get_data(as_text=True)
+    html = resp.get_data(as_text=True)
+    assert 'data-plugin="ha_media_priority"' in html
+    assert "Light Years" in html
+    assert "media_player.living_room" in html
+    assert "media_player.living_room_sonos" in html
+
+
+def _run_node_media_client(script: str) -> subprocess.CompletedProcess[str]:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node executable is not available")
+    return subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_shared_client_renders_priority_widget_id_and_empty_state() -> None:
+    client_url = (ROOT / "plugins/ha_media/client.js").as_uri()
+    script = textwrap.dedent(
+        f"""
+        import assert from "node:assert/strict";
+
+        const {{ default: render }} = await import({json.dumps(client_url)});
+
+        function renderHtml(pluginId, data) {{
+          const shadow = {{ innerHTML: "" }};
+          render(shadow, {{ cell: {{ plugin_id: pluginId }}, data }});
+          return shadow.innerHTML;
+        }}
+
+        const normal = renderHtml("ha_media_priority", {{
+          name: "Living Room",
+          state: "playing",
+          title: "Light Years",
+          artist: "The National",
+          album: "Sleep Well Beast",
+          media_duration: 248,
+          media_position: 92,
+          position_pct: 37,
+        }});
+        assert.match(normal, /data-widget="ha_media_priority"/);
+        assert.match(normal, /Light Years/);
+        assert.match(normal, /\\.w\\[data-widget="ha_media_priority"\\]/);
+
+        const empty = renderHtml("ha_media_priority", {{
+          empty: true,
+          name: "Media Priority",
+        }});
+        assert.match(empty, /No media playing/);
+        assert.match(empty, /Waiting for Home Assistant playback/);
+        assert.match(empty, /data-widget="ha_media_priority"/);
+
+        const sanitized = renderHtml('ha_media_priority"><script', {{
+          empty: true,
+          name: "Media Priority",
+        }});
+        assert.doesNotMatch(sanitized, /<script/);
+        assert.match(sanitized, /data-widget="ha_media_priorityscript"/);
+        """
+    )
+
+    result = _run_node_media_client(script)
+
+    assert result.returncode == 0, result.stdout + result.stderr
