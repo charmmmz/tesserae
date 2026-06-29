@@ -1,0 +1,45 @@
+{
+  "tesserae_compat": "1.x",
+  "name": "Home Assistant, Media Priority",
+  "version": "0.1.0",
+  "kind": "widget",
+  "description": "Now-playing tile that checks an ordered list of Home Assistant media_player entities and renders the first one that is currently playing. Paused, idle, off, unavailable, and missing entities are ignored. Requires the Home Assistant Core plugin.",
+  "icon": "ph-stack",
+  "supports": {
+    "sizes": [
+      "sm",
+      "md",
+      "lg"
+    ]
+  },
+  "cell_options": [
+    {
+      "name": "entities",
+      "type": "textarea",
+      "label": "media_player priority list, one entity_id per line",
+      "default": ""
+    },
+    {
+      "name": "show_progress",
+      "type": "boolean",
+      "label": "Show progress bar",
+      "default": true
+    },
+    {
+      "name": "show_waveform",
+      "type": "boolean",
+      "label": "Show audio waveform glyph (per-track decorative)",
+      "default": true
+    },
+    {
+      "name": "show_art_bleed",
+      "type": "boolean",
+      "label": "Tint cell with blurred album art behind the body",
+      "default": true
+    }
+  ],
+  "render": {
+    "dither": "none",
+    "needs_network": true
+  }
+}
