@@ -71,7 +71,7 @@ def _resolve_art(core: Any, raw: str) -> str | None:
     baked in as a query param), so we just prepend our configured
     base_url. Absolute URLs (some integrations return Spotify CDN
     links etc.) pass through unchanged."""
-    if not raw:
+    if raw in ("", "unavailable", "unknown"):
         return None
     if raw.startswith(("http://", "https://")):
         return raw

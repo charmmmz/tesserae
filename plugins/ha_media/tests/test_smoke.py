@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from flask import Flask
 from flask.testing import FlaskClient
 
@@ -79,6 +80,27 @@ def test_shape_media_state_collapses_standby_and_blanks_unknowns(app: Flask) -> 
     assert out["media_duration"] is None
     assert out["position_pct"] is None
     assert out["volume_pct"] is None
+
+
+@pytest.mark.parametrize("entity_picture", ["unavailable", "unknown"])
+def test_shape_media_state_omits_art_placeholders(
+    app: Flask, monkeypatch, entity_picture: str
+) -> None:
+    media, core = _mods(app)
+    state = {
+        "entity_id": "media_player.apple_tv",
+        "state": "playing",
+        "attributes": {
+            "friendly_name": "Apple TV",
+            "entity_picture": entity_picture,
+        },
+    }
+
+    with app.app_context():
+        monkeypatch.setattr(core, "base_url", lambda: "http://ha.local:8123")
+        out = media.shape_media_state(core, "media_player.apple_tv", state)
+
+    assert out["art_url"] is None
 
 
 def test_composer_mounts_widget(client: FlaskClient) -> None:
