@@ -93,6 +93,19 @@ def test_bundled_hardware_loads_against_real_protocols(
     assert sku.panel["h"] == 1872
     assert sku.manifest["vendor"] == "Seeed Studio"
 
+    assert "seeed_reterminal_e1004" in registry.devices
+    e1004 = registry.devices["seeed_reterminal_e1004"]
+    assert e1004.panel is not None
+    assert e1004.module is registry.devices["esp32_client"].module
+    assert e1004.manifest["_catalog_entry"]["protocol"] == "esp32_client"
+    assert e1004.renderer_ids == ["esp32_bin"]
+    assert e1004.panel["w"] == 1200
+    assert e1004.panel["h"] == 1600
+    assert e1004.panel["orientation"] == "portrait"
+    assert e1004.panel["native_w"] == 1200
+    assert e1004.panel["native_h"] == 1600
+    assert e1004.manifest["image_format"] == "bin"
+
 
 def test_discover_validates_schema(tmp_path: Path, hardware_schema_path: Path) -> None:
     """A hardware entry missing a required field surfaces as a LoaderError

@@ -278,6 +278,25 @@ def test_portrait_native_preset_populates_native_dims(tmp_path: Path) -> None:
     assert (panel.native_w, panel.native_h) == (1200, 1600)  # firmware stride unchanged
 
 
+def test_seeed_e1004_preset_is_portrait_native(tmp_path: Path) -> None:
+    from app.panel import resolve_settings_panel
+
+    settings = SettingsStore(tmp_path / "s.json")
+    settings.update_section(
+        "app", {"panel_preset": "seeed_reterminal_e1004", "panel_orientation": "portrait"}
+    )
+    panel = resolve_settings_panel(settings)
+    assert (panel.w, panel.h) == (1200, 1600)
+    assert (panel.native_w, panel.native_h) == (1200, 1600)
+
+    settings.update_section(
+        "app", {"panel_preset": "seeed_reterminal_e1004", "panel_orientation": "landscape"}
+    )
+    panel = resolve_settings_panel(settings)
+    assert (panel.w, panel.h) == (1600, 1200)
+    assert (panel.native_w, panel.native_h) == (1200, 1600)
+
+
 def test_custom_panel_has_no_native_dims(tmp_path: Path) -> None:
     """Custom dims can't tell us the firmware orientation without an
     extra UI knob, so the renderer falls back to packing at (w, h).

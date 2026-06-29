@@ -84,6 +84,12 @@ PANEL_PRESETS: dict[str, PanelPreset] = {
         label='Waveshare 13.3" Spectra 6 (ESP32), 1200x1600',
         native_landscape=False,
     ),  # ESP32 Waveshare 13.3", portrait-native (firmware reads 1200×1600 portrait)
+    "seeed_reterminal_e1004": PanelPreset(
+        1200,
+        1600,
+        label='Seeed reTerminal E1004 13.3" Spectra 6, 1200x1600',
+        native_landscape=False,
+    ),  # Seeed reTerminal E1004, portrait-native 13.3" Spectra 6 panel
     "waveshare_42_bw": PanelPreset(
         400, 300, label='Waveshare 4.2" B/W (ESP32, 1-bpp), 400x300'
     ),  # ESP32 Waveshare 4.2" mono e-paper, 400×300 landscape-native, 1-bpp wire
