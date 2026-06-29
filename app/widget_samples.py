@@ -306,6 +306,17 @@ def _ha_media() -> dict[str, Any]:
     }
 
 
+def _ha_media_priority() -> dict[str, Any]:
+    sample = _ha_media()
+    sample["selected_entity_id"] = "media_player.living_room"
+    sample["checked_entities"] = [
+        "media_player.apple_tv",
+        "media_player.living_room",
+        "media_player.living_room_sonos",
+    ]
+    return sample
+
+
 def _ha_sensor() -> dict[str, Any]:
     return {
         "title": "Sensors",
@@ -841,6 +852,7 @@ SAMPLES: dict[str, Any] = {
     "ha_lights": _ha_lights,
     "ha_locks": _ha_locks,
     "ha_media": _ha_media,
+    "ha_media_priority": _ha_media_priority,
     "ha_sensor": _ha_sensor,
     "ha_todo": _ha_todo,
     "ha_zones": _ha_zones,

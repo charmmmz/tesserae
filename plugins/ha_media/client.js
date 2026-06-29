@@ -37,6 +37,11 @@ function stateAccent(s) {
   return STATE_ACCENT[(s || "").toLowerCase()] || "var(--text-secondary)";
 }
 
+function widgetIdFromCtx(ctx) {
+  const raw = ctx?.cell?.plugin_id || ctx?.cell?.plugin || "ha_media";
+  return String(raw).replace(/[^a-z0-9_-]/gi, "") || "ha_media";
+}
+
 function fmtMmSs(seconds) {
   if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) return "";
   const total = Math.floor(seconds);
@@ -108,6 +113,7 @@ function waveformSvg({ seed, positionPct, accent }) {
 
 export default function render(shadow, ctx) {
   const data = ctx?.data ?? {};
+  const widgetId = widgetIdFromCtx(ctx);
   const opts = ctx?.cell?.options || {};
   const showProgress = opts.show_progress !== false;
   const showBleed = opts.show_art_bleed !== false;
@@ -117,9 +123,30 @@ export default function render(shadow, ctx) {
   if (data.error) {
     shadow.innerHTML = `
       ${css}
-      <div class="w" data-widget="ha_media">
+      <div class="w" data-widget="${escapeHtml(widgetId)}">
         <div class="w-title"><i class="ph-bold ph-warning-circle"></i><h3>Media</h3></div>
         <div class="w-body"><p class="u-muted">${escapeHtml(data.error)}</p></div>
+      </div>`;
+    return;
+  }
+
+  if (data.empty) {
+    const idleName = data.name || "Media Priority";
+    shadow.innerHTML = `
+      ${css}
+      <div class="w" data-widget="${escapeHtml(widgetId)}">
+        <div class="w-title">
+          <i class="ph-bold ph-stack" style="color:var(--text-muted)"></i>
+          <h3>${escapeHtml(idleName)}</h3>
+          <span class="w-title-meta" style="color:var(--text-muted)">idle</span>
+        </div>
+        <div class="w-body img-body">
+          <div class="img-hero"><i class="ph-bold ph-music-notes"></i></div>
+          <div class="img-meta">
+            <span class="title">No media playing</span>
+            <span class="sub">Waiting for Home Assistant playback</span>
+          </div>
+        </div>
       </div>`;
     return;
   }
@@ -185,7 +212,7 @@ export default function render(shadow, ctx) {
   }
 
   const layout = `
-    .w[data-widget="ha_media"] {
+    .w[data-widget="${widgetId}"] {
       position: relative;
       overflow: hidden;
     }
@@ -220,8 +247,8 @@ export default function render(shadow, ctx) {
       inset: 0;
       background: color-mix(in oklab, var(--surface) 55%, transparent);
     }
-    .w[data-widget="ha_media"] .w-title,
-    .w[data-widget="ha_media"] .w-body {
+    .w[data-widget="${widgetId}"] .w-title,
+    .w[data-widget="${widgetId}"] .w-body {
       position: relative;
       z-index: 1;
     }
@@ -240,7 +267,7 @@ export default function render(shadow, ctx) {
   shadow.innerHTML = `
     ${css}
     <style>${layout}</style>
-    <div class="w" data-widget="ha_media">
+    <div class="w" data-widget="${escapeHtml(widgetId)}">
       ${bleedLayer}
       <div class="w-title">
         <i class="ph-bold ${ph}" style="color:${accent}"></i>

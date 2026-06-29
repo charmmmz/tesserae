@@ -183,3 +183,23 @@ def test_choices_delegates_to_media_player_entities(app: Flask, monkeypatch) -> 
             {"value": "media_player.emby", "label": "Emby"}
         ]
         assert priority.choices("other") == []
+
+
+def test_sample_payload_exists() -> None:
+    from app.widget_samples import get_sample
+
+    sample = get_sample("ha_media_priority")
+    assert sample is not None
+    assert sample["state"] == "playing"
+    assert sample["selected_entity_id"] == "media_player.living_room"
+    assert sample["checked_entities"] == [
+        "media_player.apple_tv",
+        "media_player.living_room",
+        "media_player.living_room_sonos",
+    ]
+
+
+def test_composer_mounts_widget(client) -> None:
+    resp = client.get("/_test/render?plugin=ha_media_priority&size=md&sample=1")
+    assert resp.status_code == 200
+    assert 'data-plugin="ha_media_priority"' in resp.get_data(as_text=True)
