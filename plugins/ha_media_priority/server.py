@@ -82,7 +82,7 @@ def fetch(
         st = by_id.get(entity_id)
         if not st:
             continue
-        if str(st.get("state") or "").lower() != "playing":
+        if st.get("state") != "playing":
             continue
         out = media.shape_media_state(core, entity_id, st)
         out["selected_entity_id"] = entity_id

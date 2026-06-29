@@ -123,6 +123,28 @@ def test_empty_when_no_configured_entity_is_playing(app: Flask, monkeypatch) -> 
     assert "error" not in out
 
 
+def test_ignores_non_exact_playing_state_values(app: Flask, monkeypatch) -> None:
+    priority, core = _mods(app)
+    states = [
+        {"entity_id": "media_player.upper", "state": "PLAYING", "attributes": {}},
+        {"entity_id": "media_player.mixed", "state": "Playing", "attributes": {}},
+        {"entity_id": "media_player.none", "state": None, "attributes": {}},
+    ]
+    wanted = [
+        "media_player.upper",
+        "media_player.mixed",
+        "media_player.none",
+    ]
+
+    with app.app_context():
+        monkeypatch.setattr(core, "get_states", lambda: states)
+        out = priority.fetch({"entities": wanted}, {}, ctx={})
+
+    assert out["empty"] is True
+    assert out["state"] == "idle"
+    assert out["checked_entities"] == wanted
+
+
 def test_empty_when_no_entities_configured(app: Flask) -> None:
     priority, _core = _mods(app)
 
