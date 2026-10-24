@@ -445,8 +445,9 @@ def _design_cards(
 
     # One section per display, in registry order; a card targeting several
     # displays appears under each. Displays with nothing lined up are
-    # omitted entirely. Cards with no resolvable display land in a trailing
-    # "not on a display yet" group.
+    # omitted entirely. Empty bindings and bindings to missing displays
+    # get separate trailing groups, so retained Lineups remain manageable
+    # after their last display is deleted.
     groups: list[dict[str, Any]] = []
     for d in devices:
         dev_cards = [c for c in cards if d.id in c["device_ids"]]
@@ -474,6 +475,23 @@ def _design_cards(
                 "showing": None,
                 "thumb": "",
                 "cards": unbound,
+            }
+        )
+    unavailable = [
+        c
+        for c in cards
+        if c["device_ids"] and not any(did in device_names for did in c["device_ids"])
+    ]
+    if unavailable:
+        groups.append(
+            {
+                "id": "",
+                "name": "Unavailable displays",
+                "icon": "warning-circle",
+                "showing": None,
+                "thumb": "",
+                "refreshes_today": None,
+                "cards": unavailable,
             }
         )
     return {"cards": cards, "groups": groups, "now_hhmm": now_tz.strftime("%H:%M")}

@@ -15,6 +15,11 @@ All notable changes to Tesserae are recorded here. Format loosely follows
 
 ### Fixed
 
+- **Lineups remain visible after their displays are deleted.** Lineups whose
+  targets are all unavailable now appear in an **Unavailable displays** group
+  on the web, where they can still be edited or deleted. Existing Lineups are
+  preserved, including when device deletion also clears associated data.
+
 - **Prioritised multi-select lists can actually be reordered.** Checked rows
   now expose a drag handle that works with a mouse, touch, or pen, plus arrow,
   Home, and End keys for precise accessible movement. The new DOM order is
