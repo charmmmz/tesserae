@@ -73,6 +73,16 @@ ERRATA: tuple[Erratum, ...] = ()
 
 SCHEMA_ERRATA: tuple[SchemaErratum, ...] = (
     SchemaErratum(
+        pointer="components/schemas/Device/properties",
+        patch={"mac": {
+            "description": "Complete Wi-Fi MAC used to associate authenticated Bluetooth records.",
+            "type": "string", "nullable": True,
+            "pattern": "^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$",
+        }},
+        since="vNext (unreleased)",
+        why="Expose complete hardware identity to associate authenticated Bluetooth records without relying on device ID suffixes.",
+    ),
+    SchemaErratum(
         pointer="components/schemas/DeviceCapabilitySupport/properties",
         patch={
             "detail": {

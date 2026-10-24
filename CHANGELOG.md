@@ -8,6 +8,10 @@ All notable changes to Tesserae are recorded here. Format loosely follows
 
 ### Added
 
+- Companion's authenticated device list exposes the full Wi-Fi MAC when known,
+  allowing automatic association with an authenticated Bluetooth display even
+  when its server device ID differs. Missing or invalid MAC addresses remain null.
+
 - Companion publishers can choose snapshot retention up to 365 days or explicitly retain the latest snapshot until replacement or deletion. The new `personal_data_retention` capability enables Never; 24-hour stale indicators remain independent, and existing clients keep their 48-hour default.
 
 - **Apple Health seven-day summaries can now be published through Companion.**
