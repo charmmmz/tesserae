@@ -1,0 +1,21 @@
+# Runtime dependencies installed in the stable Docker dependency layer.
+# Keep these entries in the same order and exactly in sync with
+# project.dependencies in pyproject.toml; the Docker build verifies that
+# contract before installing Tesserae itself.
+flask>=3.0,<4
+pydantic>=2.6,<3
+jsonschema>=4.21,<5
+pillow>=10.2,<13
+pillow-heif>=1.1,<2
+numpy>=1.26,<3
+paho-mqtt>=2.0,<3
+playwright>=1.60,<1.61
+amqtt>=0.11,<1
+icalendar>=5.0,<7
+recurring-ical-events>=2.1,<4
+defusedxml>=0.7,<1
+waitress>=3.0,<4
+tzdata
+cryptography>=42,<50
+zeroconf>=0.130,<1
+segno>=1.6,<2

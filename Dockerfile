@@ -41,10 +41,36 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 WORKDIR /app
 
-# Copy the whole source tree, Tesserae's loaders resolve plugins/,
-# renderers/, devices/, hardware/, templates/, and static/ from
-# REPO_ROOT, so the install needs to leave the source tree in place
-# rather than just copying app/ into site-packages.
+# ``gosu`` is what the entrypoint uses to drop privileges after fixing
+# the bind-mount ownership. It's a single ~2 MB static binary; the
+# obvious alternative ``su-exec`` only ships on Alpine. The base
+# image's ``setpriv`` works too but lacks gosu's standard semantics.
+#
+# ``fonts-noto-color-emoji`` is the de-facto Linux colour-emoji font.
+# Widgets that paint country flags (f1_next, sky_*) and any other
+# Unicode emoji need this to render properly inside the headless
+# Chromium that drives the composer, without it, flag emojis fall
+# back to regional-indicator letter pairs in boxes. ~12 MB on top
+# of the existing image, paid once for every emoji widget.
+#
+# Keep this stable system layer ahead of dependency and source copies:
+# an app-only release should not make operators pull it again.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gosu fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/* \
+    && gosu nobody true
+
+# Install runtime dependencies before copying pyproject.toml or source.
+# pyproject.toml contains the release version and therefore changes on
+# every release even when dependencies do not. This dedicated manifest
+# keeps the expensive dependency layer reusable across app-only updates.
+COPY requirements-docker.txt /tmp/requirements-docker.txt
+RUN pip install -r /tmp/requirements-docker.txt
+
+# Copy the whole source tree after the stable layers. Tesserae's loaders
+# resolve plugins/, renderers/, devices/, hardware/, templates/, and
+# static/ from REPO_ROOT, so the install needs to leave the source tree
+# in place rather than just copying app/ into site-packages.
 COPY pyproject.toml /app/
 COPY app/        /app/app/
 COPY plugins/    /app/plugins/
@@ -66,23 +92,12 @@ COPY static/     /app/static/
 # REPO_ROOT (resolved from app_factory.__file__) would point at
 # site-packages where none of those folders live. Editable keeps
 # REPO_ROOT = /app so the loaders find their content.
-RUN pip install -e /app
-
-# ``gosu`` is what the entrypoint uses to drop privileges after fixing
-# the bind-mount ownership. It's a single ~2 MB static binary; the
-# obvious alternative ``su-exec`` only ships on Alpine. The base
-# image's ``setpriv`` works too but lacks gosu's standard semantics.
-#
-# ``fonts-noto-color-emoji`` is the de-facto Linux colour-emoji font.
-# Widgets that paint country flags (f1_next, sky_*) and any other
-# Unicode emoji need this to render properly inside the headless
-# Chromium that drives the composer, without it, flag emojis fall
-# back to regional-indicator letter pairs in boxes. ~12 MB on top
-# of the existing image, paid once for every emoji widget.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends gosu fonts-noto-color-emoji \
-    && rm -rf /var/lib/apt/lists/* \
-    && gosu nobody true
+# Validate the duplicated build manifest before relying on ``--no-deps``.
+# The comparison is deliberately exact so dependency additions, removals,
+# ordering, and constraints cannot drift silently between the two files.
+RUN python -c 'import pathlib, tomllib; pyproject = tomllib.loads(pathlib.Path("/app/pyproject.toml").read_text()); docker = [line.strip() for line in pathlib.Path("/tmp/requirements-docker.txt").read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")]; assert docker == pyproject["project"]["dependencies"], "requirements-docker.txt must exactly match project.dependencies in pyproject.toml"' \
+    && pip install -e /app --no-deps \
+    && rm /tmp/requirements-docker.txt
 
 # Persistent state, settings.json, pages, schedules, events DB, render
 # cache, gallery photos, backups. Tesserae's default data_root is
