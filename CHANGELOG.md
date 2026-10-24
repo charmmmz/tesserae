@@ -13,6 +13,14 @@ All notable changes to Tesserae are recorded here. Format loosely follows
   frequently changing Tesserae source, so Docker can reuse those large layers
   across releases that do not change dependencies.
 
+### Fixed
+
+- **Prioritised multi-select lists can actually be reordered.** Checked rows
+  now expose a drag handle that works with a mouse, touch, or pen, plus arrow,
+  Home, and End keys for precise accessible movement. The new DOM order is
+  submitted immediately, so priority-based widgets such as Album Art evaluate
+  Home Assistant entities in the order shown by the editor.
+
 ## [0.309.1], 2026-08-16
 
 ### Fixed
