@@ -39,10 +39,11 @@ TESTFLIGHT_URL = "https://testflight.apple.com/join/gjQar3TK"
 # granting a capability rather than editing an ACL.
 SCOPE_LABELS: dict[str, str] = {
     "devices:read": "See your displays",
+    "device_setup:write": "Set up nearby displays",
     "dashboards:read": "See your dashboards",
     "push:write": "Send dashboards to a display",
     "media:write": "Send photos and images",
-    "personal_data:write": "Publish reminders from the phone",
+    "personal_data:write": "Publish selected personal data from the phone",
     "lineups:read": "See your Lineups",
     "lineups:control": "Start, stop, and step Lineups",
     "lineups:write": "Create and edit Lineups",

@@ -120,6 +120,7 @@ def test_capabilities_probe_is_unauthenticated_and_valid(app: Flask) -> None:
     # covered in test_companion_previews.
     assert set(body["features"]) == {
         "devices",
+        "device_setup",
         "dashboards",
         "dashboard_push",
         "image_push",
@@ -128,6 +129,8 @@ def test_capabilities_probe_is_unauthenticated_and_valid(app: Flask) -> None:
         "history",
         "image_framing",
         "personal_data_reminders",
+        "personal_data_health",
+        "personal_data_retention",
         "lineups",
         "lineup_control",
         "lineup_authoring",
@@ -135,7 +138,11 @@ def test_capabilities_probe_is_unauthenticated_and_valid(app: Flask) -> None:
         # The photo library is a plugin; the test app registers it.
         "gallery",
     }
-    assert body["personal_data"]["sources"] == ["reminders", "reminders.fridge"]
+    assert body["personal_data"]["sources"] == [
+        "reminders",
+        "reminders.fridge",
+        "health.summary",
+    ]
     assert "webpage_push" not in body["features"]
     assert body["limits"]["image_fit_modes"] == list(companion_api.IMAGE_FIT_MODES)
     # Contract 0.6: the zoom bound is mandatory alongside image_framing.
@@ -165,6 +172,7 @@ def test_pair_exchanges_code_for_scoped_token(app: Flask) -> None:
     assert body["token"].startswith("tc_live_")
     assert set(body["scopes"]) == {
         "devices:read",
+        "device_setup:write",
         "dashboards:read",
         "push:write",
         "media:write",
@@ -221,6 +229,61 @@ def test_firmware_pairing_code_cannot_mint_a_companion_token(app: Flask) -> None
     assert resp.get_json()["error"]["code"] == "pairing_expired"
 
 
+def test_companion_can_mint_single_use_firmware_pairing_code(app: Flask) -> None:
+    token = _token(app)
+    resp = app.test_client().post(
+        "/api/app/v1/device-pairings",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201
+    body = resp.get_json()
+    _validate(body, "FirmwareDevicePairing")
+    assert len(body["code"]) == 6
+
+    registered = app.test_client().post(
+        "/api/v1/device/register",
+        headers={"X-Pairing-Code": body["code"], "Content-Type": "application/json"},
+        data=json.dumps(
+            {
+                "device_id": "nearby-display",
+                "kind": "pico_bin_client",
+                "panel_w": 1600,
+                "panel_h": 1200,
+                "fw_version": "1.14.0",
+            }
+        ),
+    )
+    assert registered.status_code == 201
+
+    replay = app.test_client().post(
+        "/api/v1/device/register",
+        headers={"X-Pairing-Code": body["code"], "Content-Type": "application/json"},
+        data=json.dumps(
+            {
+                "device_id": "replay-display",
+                "kind": "pico_bin_client",
+                "panel_w": 1600,
+                "panel_h": 1200,
+                "fw_version": "1.14.0",
+            }
+        ),
+    )
+    assert replay.status_code == 403
+
+
+def test_device_pairing_requires_dedicated_scope(app: Flask) -> None:
+    token = _token(app)
+    record = app.config["COMPANION_TOKENS"].list_active()[0]
+    record.scopes.remove("device_setup:write")
+
+    resp = app.test_client().post(
+        "/api/app/v1/device-pairings",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 403
+    assert resp.get_json()["error"]["code"] == "forbidden"
+
+
 # -- read models ---------------------------------------------------------
 
 
@@ -249,6 +312,8 @@ def test_devices_listing_is_contract_valid(app: Flask) -> None:
     # #184: the resolved Phosphor slug ships on every device (kind default
     # until the user overrides it per instance; "monitor" as last resort).
     assert isinstance(device["icon"], str) and device["icon"]
+
+
 
 
 def test_devices_listing_reports_a_pending_rest_render_until_frame_is_served(app: Flask) -> None:

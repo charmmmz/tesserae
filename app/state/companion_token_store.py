@@ -58,6 +58,10 @@ from typing import Any
 # grant instead (#207).
 COMPANION_SCOPES: tuple[str, ...] = (
     "devices:read",
+    # A paired app may mint one short-lived firmware registration code for a
+    # physically-nearby display.  It never receives the resulting device
+    # credential, and older pairings can be granted this scope explicitly.
+    "device_setup:write",
     "dashboards:read",
     "push:write",
     "media:write",
@@ -74,11 +78,11 @@ COMPANION_SCOPES: tuple[str, ...] = (
 )
 
 # Scopes an operator can grant to an existing pairing from Settings, on top
-# of the set above. Each one is here because it shouldn't arrive by default:
-# rewriting household scheduling is a different ask from pushing a picture,
-# and a client paired months ago shouldn't silently acquire it because the
-# server upgraded (#207).
-OPTIONAL_SCOPES: tuple[str, ...] = ("lineups:write",)
+# of the set above. ``lineups:write`` never arrives by default. Device setup is
+# present on new pairings, but remains listed here so an operator can grant or
+# revoke it for pairings created before the capability existed; old clients do
+# not silently acquire a new device-registration ability on server upgrade.
+OPTIONAL_SCOPES: tuple[str, ...] = ("lineups:write", "device_setup:write")
 
 # Every scope this server recognises. A record carrying anything else was
 # either hand-edited or written by a newer build; it's dropped on load

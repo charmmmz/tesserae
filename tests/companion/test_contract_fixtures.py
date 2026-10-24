@@ -80,11 +80,12 @@ CASES = {
 
 def test_openapi_shape_and_operation_ids_are_stable() -> None:
     assert SPEC["openapi"] == "3.0.3"
-    assert SPEC["info"]["version"] == "0.12.0"
+    assert SPEC["info"]["version"] == "0.14.0"
     assert set(SPEC["paths"]) == {
         "/api/app/v1",
         "/api/app/v1/pair",
         "/api/app/v1/session",
+        "/api/app/v1/device-pairings",
         "/api/app/v1/personal-data/status",
         "/api/app/v1/personal-data/{source_id}",
         "/api/app/v1/devices",
@@ -238,6 +239,7 @@ def test_personal_data_capabilities_advertise_source_ids_directly() -> None:
         "health.summary",
     ]
     assert "personal_data_reminders" in capabilities["features"]
+    assert "personal_data_health" in capabilities["features"]
     assert "personal_data_reminders_multi_list" not in capabilities["features"]
 
 

@@ -6,6 +6,25 @@ All notable changes to Tesserae are recorded here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- Companion publishers can choose snapshot retention up to 365 days or explicitly retain the latest snapshot until replacement or deletion. The new `personal_data_retention` capability enables Never; 24-hour stale indicators remain independent, and existing clients keep their 48-hour default.
+
+- **Apple Health seven-day summaries can now be published through Companion.**
+  Servers advertise the opt-in `health.summary` source, strictly validate its
+  bounded Activity, Sleep, and Workout sections, retain only the latest
+  publisher-isolated snapshot until expiry, and emit source-wide semantic
+  refresh events without putting raw Health values in logs, API errors, or
+  backups.
+
+- **Companion can securely register a physically nearby display during
+  Bluetooth setup.** Authenticated app sessions with `device_setup:write` may
+  mint a short-lived, single-use firmware registration code through
+  `POST /api/app/v1/device-pairings`. Firmware still redeems that code through
+  the existing device registration endpoint, so the app never receives a
+  display token. Existing Companion sessions require an explicit operator
+  grant; new pairings include the setup permission.
+
 ### Changed
 
 - **App-only Docker upgrades download much smaller changed layers.** System

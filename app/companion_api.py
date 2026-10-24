@@ -16,9 +16,8 @@ job the client polls; quiet-hours suppression surfaces as a *successful*
 ``quiet`` outcome, never a failure. ``_tesserae._tcp`` discovery lives in
 app.mdns.
 
-Contract: ``charmmmz/tesserae-companion-ios`` ``Contracts/app-v1.openapi.yaml``
-(OpenAPI 0.7.0). The vendored copy + fixtures under ``tests/companion/``
-guard these shapes.
+Contract: ``charmmmz/tesserae-companion-ios`` ``Contracts/app-v1.openapi.yaml``.
+The vendored copy + fixtures under ``tests/companion/`` guard these shapes.
 
 mypy --strict applies to this module, see pyproject.toml.
 """
@@ -69,6 +68,12 @@ from app.data_change_refresh import (
 from app.device_capability import capability_support_map, heartbeat_freshness
 from app.device_loader import Device, DeviceRegistry
 from app.device_preview import retained_device_preview
+from app.health_summary import (
+    HEALTH_SUMMARY_MAX_BYTES,
+    HEALTH_SUMMARY_SOURCE_ID,
+    InvalidHealthSummary,
+    validate_health_summary,
+)
 from app.image_upload import (
     IMAGE_CONTENT_TYPES,
     IMAGE_FIT_MODES,
@@ -111,13 +116,13 @@ IMAGE_FRAMING_MAX_ZOOM = 4
 JOB_RETENTION_SECONDS = 86_400
 IDEMPOTENCY_RETENTION_SECONDS = 86_400
 
-# Personal-data bridge (#176, contract 0.7): a snapshot is fresh until it is
+# Personal-data bridge (#176): a snapshot is fresh until it is
 # this old, then stale, then expired (raw values redacted). ``max_ttl`` bounds
 # how far a client may set expires_at past generated_at. Server-advertised so
 # the app does not hard-code them.
 PERSONAL_DATA_STALE_SECONDS = 86_400  # 24 h
-PERSONAL_DATA_MAX_TTL_SECONDS = 172_800  # 48 h
-PERSONAL_DATA_SOURCES = ("reminders", "reminders.fridge")
+PERSONAL_DATA_MAX_TTL_SECONDS = 31_536_000  # 365 days; null explicitly opts out
+PERSONAL_DATA_SOURCES = ("reminders", "reminders.fridge", HEALTH_SUMMARY_SOURCE_ID)
 PERSONAL_DATA_SNAPSHOT_VERSION = "personal_data_bridge_v1"
 PERSONAL_DATA_REMINDERS_MAX_LISTS = 20
 PERSONAL_DATA_REMINDERS_MAX_ITEMS = 200
@@ -127,6 +132,7 @@ _REMINDER_PRIORITIES = frozenset(("none", "low", "medium", "high"))
 # assuming the full set, so unshipped surfaces degrade cleanly.
 FEATURES = (
     "devices",
+    "device_setup",
     "dashboards",
     "dashboard_push",
     "image_push",
@@ -135,6 +141,8 @@ FEATURES = (
     "history",
     "image_framing",
     "personal_data_reminders",
+    "personal_data_health",
+    "personal_data_retention",
     # Read + control for Lineups (#205). Authoring is a separate capability
     # so a client can offer the controls without implying it can edit, which
     # it can't until the write path behind #204 exists.
@@ -188,6 +196,10 @@ def _tokens() -> CompanionTokenStore:
 
 def _companion_pairings() -> PairingStore:
     return current_app.config["COMPANION_PAIRING_STORE"]  # type: ignore[no-any-return]
+
+
+def _firmware_pairings() -> PairingStore:
+    return current_app.config["PAIRING_STORE"]  # type: ignore[no-any-return]
 
 
 def _devices() -> DeviceRegistry:
@@ -496,6 +508,21 @@ def pair() -> Any:
     return jsonify(payload), 201
 
 
+@bp.post("/device-pairings")
+@_require_companion("device_setup:write")
+def create_device_pairing() -> Any:
+    """Mint a registration code for one physically-nearby display.
+
+    The Companion passes the code to firmware over its authenticated BLE
+    setup channel.  Firmware still redeems it through the existing
+    ``POST /api/v1/device/register`` boundary, so the app never receives a
+    firmware access token and this route cannot directly create a device.
+    """
+    record = _firmware_pairings().issue(note=f"Companion: {g.companion.name}"[:64])
+    expires_at = datetime.fromtimestamp(record.expires_at, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return jsonify({"code": record.code, "expires_at": expires_at}), 201
+
+
 @bp.get("/session")
 @_require_companion()
 def read_session() -> Any:
@@ -564,8 +591,8 @@ def _is_iso_date(value: Any) -> bool:
         return False
 
 
-def _personal_data_state(generated_epoch: float, expires_epoch: float, now: float) -> str:
-    if now >= expires_epoch:
+def _personal_data_state(generated_epoch: float, expires_epoch: float | None, now: float) -> str:
+    if expires_epoch is not None and now >= expires_epoch:
         return "expired"
     if now >= generated_epoch + PERSONAL_DATA_STALE_SECONDS:
         return "stale"
@@ -573,20 +600,20 @@ def _personal_data_state(generated_epoch: float, expires_epoch: float, now: floa
 
 
 def _source_status(
-    source_id: str, generated_epoch: float, expires_epoch: float, now: float
+    source_id: str, generated_epoch: float, expires_epoch: float | None, now: float
 ) -> dict[str, Any]:
     return {
         "source_id": source_id,
         "state": _personal_data_state(generated_epoch, expires_epoch, now),
         "generated_at": _iso(generated_epoch),
         "stale_at": _iso(generated_epoch + PERSONAL_DATA_STALE_SECONDS),
-        "expires_at": _iso(expires_epoch),
+        "expires_at": _iso(expires_epoch) if expires_epoch is not None else None,
     }
 
 
 def _validate_reminders_fridge(
     source_id: str, body: Any
-) -> tuple[tuple[dict[str, Any], float, float] | None, tuple[Response, int] | None]:
+) -> tuple[tuple[dict[str, Any], float, float | None] | None, tuple[Response, int] | None]:
     """Validate a ``reminders.fridge`` snapshot. Returns ``((snapshot, gen, exp),
     None)`` or ``(None, error)``. Strict: unknown fields are rejected, so the
     endpoint can never become arbitrary JSON storage."""
@@ -604,11 +631,11 @@ def _validate_reminders_fridge(
         return bad("source_id does not match the path")
     gen = _parse_iso(body.get("generated_at"))
     exp = _parse_iso(body.get("expires_at"))
-    if gen is None or exp is None:
-        return bad("generated_at and expires_at must be ISO 8601")
-    if exp <= gen:
+    if gen is None or "expires_at" not in body or (body["expires_at"] is not None and exp is None):
+        return bad("generated_at must be ISO 8601; expires_at must be ISO 8601 or null")
+    if exp is not None and exp <= gen:
         return bad("expires_at must be after generated_at")
-    if exp - gen > PERSONAL_DATA_MAX_TTL_SECONDS:
+    if exp is not None and exp - gen > PERSONAL_DATA_MAX_TTL_SECONDS:
         return bad("expires_at exceeds the maximum retention window")
     data = body.get("data")
     if not isinstance(data, dict) or set(data) - {"items"}:
@@ -642,7 +669,7 @@ def _validate_reminders_fridge(
 
 def _validate_reminders(
     source_id: str, body: Any
-) -> tuple[tuple[dict[str, Any], float, float] | None, tuple[Response, int] | None]:
+) -> tuple[tuple[dict[str, Any], float, float | None] | None, tuple[Response, int] | None]:
     """Validate the generic, grouped Apple Reminders snapshot.
 
     The schema stays deliberately bounded and source-specific: list ids are
@@ -663,11 +690,11 @@ def _validate_reminders(
         return bad("source_id does not match the path")
     gen = _parse_iso(body.get("generated_at"))
     exp = _parse_iso(body.get("expires_at"))
-    if gen is None or exp is None:
-        return bad("generated_at and expires_at must be ISO 8601")
-    if exp <= gen:
+    if gen is None or "expires_at" not in body or (body["expires_at"] is not None and exp is None):
+        return bad("generated_at must be ISO 8601; expires_at must be ISO 8601 or null")
+    if exp is not None and exp <= gen:
         return bad("expires_at must be after generated_at")
-    if exp - gen > PERSONAL_DATA_MAX_TTL_SECONDS:
+    if exp is not None and exp - gen > PERSONAL_DATA_MAX_TTL_SECONDS:
         return bad("expires_at exceeds the maximum retention window")
 
     data = body.get("data")
@@ -731,8 +758,28 @@ def put_personal_data(source_id: str) -> Any:
     timestamp is refused so delayed background work can't overwrite newer data."""
     if source_id not in PERSONAL_DATA_SOURCES:
         return _error("unsupported_personal_data_source", f"unknown source {source_id!r}", 400)
+    if source_id == HEALTH_SUMMARY_SOURCE_ID:
+        content_length = request.content_length
+        if content_length is not None and content_length > HEALTH_SUMMARY_MAX_BYTES:
+            return _error("invalid_snapshot", "health.summary exceeds the 256 KiB limit", 400)
+        if len(request.get_data(cache=True)) > HEALTH_SUMMARY_MAX_BYTES:
+            return _error("invalid_snapshot", "health.summary exceeds the 256 KiB limit", 400)
     body = request.get_json(silent=True)
-    if source_id == "reminders":
+    result: tuple[dict[str, Any], float, float | None] | None
+    err: tuple[Response, int] | None
+    if source_id == HEALTH_SUMMARY_SOURCE_ID:
+        try:
+            result = validate_health_summary(
+                source_id,
+                body,
+                active_timezone=_timezone(),
+                snapshot_version=PERSONAL_DATA_SNAPSHOT_VERSION,
+                maximum_ttl_seconds=PERSONAL_DATA_MAX_TTL_SECONDS,
+            )
+        except InvalidHealthSummary as exc:
+            return _error("invalid_snapshot", str(exc), 400)
+        err = None
+    elif source_id == "reminders":
         result, err = _validate_reminders(source_id, body)
     else:
         result, err = _validate_reminders_fridge(source_id, body)
@@ -782,8 +829,12 @@ def personal_data_status() -> Any:
     sources = []
     for source_id, rec in sorted(store.all(publisher_id=publisher_id).items()):
         gen, exp = rec.get("generated_epoch"), rec.get("expires_epoch")
-        if isinstance(gen, (int, float)) and isinstance(exp, (int, float)):
-            sources.append(_source_status(source_id, float(gen), float(exp), now))
+        if isinstance(gen, (int, float)) and (
+            isinstance(exp, (int, float)) or ("expires_epoch" in rec and exp is None)
+        ):
+            sources.append(
+                _source_status(source_id, float(gen), float(exp) if exp is not None else None, now)
+            )
     return jsonify({"sources": sources})
 
 
@@ -820,6 +871,8 @@ def _nullable_int(value: Any, *, lo: int | None = None, hi: int | None = None) -
     if hi is not None and out > hi:
         return None
     return out
+
+
 
 
 def _device_view(
