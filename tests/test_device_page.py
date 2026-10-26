@@ -89,6 +89,65 @@ def test_device_page_unknown_device_redirects_to_the_list(app: Flask) -> None:
     assert resp.location.endswith("/settings/devices")
 
 
+def test_phone_mode_report_is_visible_and_wifi_removes_bluetooth_badge(app: Flask) -> None:
+    client = app.test_client()
+    _sign_in(client)
+    dev = _add(client)
+    other = _add(client, "study", name="Study")
+    before = client.get("/settings/devices").get_data(as_text=True)
+    assert "data-device-mode-badge" not in before
+    transport_before = re.findall(r'data-transport="([^"]+)"', before)
+    token, _ = app.config["COMPANION_TOKENS"].issue(
+        client={"name": "Phone", "platform": "ios", "version": "1"},
+        scopes=["device_setup:write"],
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    path = f"/api/app/v1/devices/{dev}/mode-observation"
+    for mode, timestamp in [
+        ("bluetooth", "2026-01-02T03:04:05Z"),
+        ("wifi", "2026-01-02T03:04:06Z"),
+    ]:
+        assert (
+            client.put(
+                path,
+                headers=headers,
+                json={"mode": mode, "observed_at": timestamp, "source": "ios_ble"},
+            ).status_code
+            == 204
+        )
+        body = client.get("/settings/devices").get_data(as_text=True)
+        assert re.findall(r'data-transport="([^"]+)"', body) == transport_before
+        assert body.count("data-device-mode-badge") == (1 if mode == "bluetooth" else 0)
+        detail = client.get(f"/settings/devices/{dev}").get_data(as_text=True)
+        assert "data-device-mode-observation" in detail
+        assert "Phone last confirmed" in detail
+        assert f'datetime="{timestamp}"' in detail
+        assert ("data-device-mode-badge" in detail) == (mode == "bluetooth")
+        assert ("Bluetooth" if mode == "bluetooth" else "Wi-Fi") in detail
+        provenance = app.config["DEVICE_FACTS"].get(dev)["mode_observation"]["token_id"]
+        assert provenance not in detail and token not in detail
+        other_detail = client.get(f"/settings/devices/{other}").get_data(as_text=True)
+        assert "data-device-mode-badge" not in other_detail
+        assert "No report yet" in other_detail
+
+
+def test_invalid_phone_observation_does_not_break_device_page(app: Flask) -> None:
+    client = app.test_client()
+    _sign_in(client)
+    dev = _add(client)
+    app.config["DEVICE_FACTS"].record_mode_observation(
+        dev,
+        {
+            "mode": "bluetooth",
+            "source": "ios_ble",
+            "observed_at": "not-a-date",
+        },
+    )
+    response = client.get(f"/settings/devices/{dev}")
+    assert response.status_code == 200
+    assert "data-device-mode-badge" not in response.get_data(as_text=True)
+
+
 def test_calibration_page_renders(app: Flask) -> None:
     client = app.test_client()
     _sign_in(client)

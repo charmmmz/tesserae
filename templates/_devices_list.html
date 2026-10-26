@@ -8,7 +8,7 @@
    ``_build_device_section``), ``device_kinds``, ``discovered_rest`` /
    ``discovered_mqtt``, ``pairing_codes``, ``pairing_reveal``. #}
 
-{% from "_device_parts.html" import overview_tiles, render_thumb, device_actions with context %}
+{% from "_device_parts.html" import overview_tiles, render_thumb, device_actions, mode_badge with context %}
 
 {% set _opened = request.args.get('opened') %}
 {% set _show_add = request.args.get('add') == '1' or pairing_reveal or pairing_codes %}
@@ -105,6 +105,7 @@
           <span class="dx-devrow-name">
             <i class="ph ph-{{ section.icon or 'device-mobile' }} dx-devrow-icon" aria-hidden="true"></i>
             <span>{{ section.device_name }}</span>
+            {{ mode_badge(section) }}
           </span>
           <span class="dx-devrow-link"><span class="tg tg--sm tg--mono">{{ section.transport_badge }}</span>{% if section.colour_depth and section.colour_depth.prompt %} <span class="tg tg--sm tg--teal" title="This display's firmware can paint 4-level grey. Open its settings to switch." data-grey-badge>Grey ready</span>{% endif %}</span>
         </span>

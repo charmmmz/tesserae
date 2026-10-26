@@ -13,6 +13,7 @@ import json
 import math
 import os
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -988,6 +989,32 @@ def _build_sections() -> list[dict[str, Any]]:
     return sections
 
 
+def _mode_observation_view(device_id: str) -> dict[str, str] | None:
+    """Show the phone's last confirmation separately from server transport/health."""
+    facts = current_app.config["DEVICE_FACTS"].get(device_id) or {}
+    observation = facts.get("mode_observation")
+    if (
+        not isinstance(observation, dict)
+        or observation.get("mode") not in ("bluetooth", "wifi")
+        or observation.get("source") != "ios_ble"
+        or not isinstance(observation.get("observed_at"), str)
+    ):
+        return None
+    try:
+        observed = datetime.fromisoformat(observation["observed_at"].replace("Z", "+00:00"))
+        if observed.tzinfo is None:
+            return None
+        observed_label = observed.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    except (ValueError, OverflowError, OSError):
+        return None
+    return {
+        "mode": observation["mode"],
+        "label": "Bluetooth" if observation["mode"] == "bluetooth" else "Wi-Fi",
+        "observed_at": observation["observed_at"],
+        "observed_label": observed_label,
+    }
+
+
 def _build_device_section(store: Any, device: Device) -> dict[str, Any] | None:
     """Build the view-model for one device instance: the dict the
     Devices table row, the quick panel, the device page and the
@@ -1086,6 +1113,7 @@ def _build_device_section(store: Any, device: Device) -> dict[str, Any] | None:
         "meta": _device_meta_block(device, is_instance),
         "connection_details": _device_connection_details(device, is_instance),
         "transport_badge": _transport_badge(device),
+        "mode_observation": _mode_observation_view(device.id),
         "status": _status_view(device),
         # The colour-gamut control only matters for the .bin Pi path
         # (pi_bin packs server-side to a fixed palette). PNG clients
