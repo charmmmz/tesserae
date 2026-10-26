@@ -147,6 +147,7 @@ _REMINDER_PRIORITIES = frozenset(("none", "low", "medium", "high"))
 FEATURES = (
     "devices",
     "device_setup",
+    "device_mode_observations",
     "dashboards",
     "dashboard_push",
     "image_push",
@@ -1005,6 +1006,11 @@ def _device_view(
     }
     if pending_render is not None:
         view["pending_render"] = pending_render
+    facts = current_app.config["DEVICE_FACTS"].get(device.id) or {}
+    if isinstance(observation := facts.get("mode_observation"), dict):
+        view["mode_observation"] = {
+            key: observation[key] for key in ("mode", "observed_at", "source", "received_at")
+        }
     return view
 
 
@@ -1047,6 +1053,50 @@ def lookup_device() -> Any:
     ]
     # Duplicate registry identities cannot establish an association either.
     return jsonify({"device_id": matches[0] if len(matches) == 1 else None})
+
+
+@bp.put("/devices/<device_id>/mode-observation")
+@_require_companion("device_setup:write")
+def report_device_mode(device_id: str) -> Any:
+    """Persist the app's confirmed BLE observation, without commanding a device."""
+    device = _devices().get(device_id)
+    if device is None or device.kind_of is None:
+        return _error("not_found", "Display not found.", 404)
+    body = request.get_json(silent=True)
+    if (
+        not isinstance(body, dict)
+        or set(body) != {"mode", "observed_at", "source"}
+        or body.get("mode") not in ("wifi", "bluetooth")
+        or body.get("source") != "ios_ble"
+        or not isinstance(body.get("observed_at"), str)
+    ):
+        return _error("invalid_request", "Supply a confirmed Bluetooth mode observation.", 400)
+    try:
+        if not re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})",
+            body["observed_at"],
+        ):
+            raise ValueError("RFC 3339 required")
+        observed = datetime.fromisoformat(body["observed_at"].replace("Z", "+00:00"))
+        if observed.tzinfo is None:
+            raise ValueError("Timezone required")
+        observed = observed.astimezone(UTC)
+    except (ValueError, OverflowError):
+        return _error("invalid_request", "observed_at must be an RFC 3339 timestamp.", 400)
+    now = datetime.now(UTC)
+    if observed < datetime(1970, 1, 1, tzinfo=UTC) or observed > now + timedelta(minutes=5):
+        return _error("invalid_request", "observed_at is outside the accepted range.", 400)
+    current_app.config["DEVICE_FACTS"].record_mode_observation(
+        device_id,
+        {
+            "mode": body["mode"],
+            "observed_at": observed.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": "ios_ble",
+            "received_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "token_id": g.companion.token_id,
+        },
+    )
+    return "", 204
 
 
 # -- device timeline -----------------------------------------------------

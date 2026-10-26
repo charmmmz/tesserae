@@ -105,3 +105,23 @@ class DeviceFactsStore:
                 return
             del data[device_id]
             self._save(data)
+
+    def record_mode_observation(self, device_id: str, observation: dict[str, str]) -> None:
+        """Keep the newest confirmed observation; delayed retries are harmless.
+
+        The API normalizes observed_at to whole-second UTC before calling this.
+        This advisory value never changes firmware configuration or scheduling.
+        """
+        with self._lock:
+            data = self._load()
+            raw = data.get(device_id)
+            entry: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
+            previous = entry.get("mode_observation")
+            if (
+                isinstance(previous, dict)
+                and str(previous.get("observed_at", "")) >= observation["observed_at"]
+            ):
+                return
+            entry["mode_observation"] = dict(observation)
+            data[device_id] = entry
+            self._save(data)

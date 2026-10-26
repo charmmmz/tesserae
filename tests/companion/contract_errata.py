@@ -69,6 +69,12 @@ class SchemaErratum:
 ERRATA: tuple[Erratum, ...] = (
     Erratum(
         pointer="components/schemas/Capabilities/properties/features/items/enum",
+        values=("device_mode_observations",),
+        since="vNext (unreleased)",
+        why="Local-first upload of confirmed iOS Bluetooth mode observations, without changing delivery gates.",
+    ),
+    Erratum(
+        pointer="components/schemas/Capabilities/properties/features/items/enum",
         values=("device_timeline",),
         since="v0.311.0",
         why=(
@@ -93,8 +99,29 @@ ERRATA: tuple[Erratum, ...] = (
 _DEVICE_LOOKUP = yaml.safe_load(
     Path(__file__).with_name("device_lookup.openapi.yaml").read_text(encoding="utf-8")
 )
+_DEVICE_MODE = yaml.safe_load(
+    Path(__file__).with_name("device_mode.openapi.yaml").read_text(encoding="utf-8")
+)
 
 SCHEMA_ERRATA: tuple[SchemaErratum, ...] = (
+    SchemaErratum(
+        pointer="paths",
+        patch=_DEVICE_MODE["paths"],
+        since="vNext (unreleased)",
+        why="Confirmed Bluetooth mode upload from the current iOS contract.",
+    ),
+    SchemaErratum(
+        pointer="components/schemas",
+        patch=_DEVICE_MODE["schemas"],
+        since="vNext (unreleased)",
+        why="Mode observation request and advisory status from the current iOS contract.",
+    ),
+    SchemaErratum(
+        pointer="components/schemas/Device/properties",
+        patch=_DEVICE_MODE["device_properties"],
+        since="vNext (unreleased)",
+        why="Last confirmed mode, with its observation and receipt times.",
+    ),
     SchemaErratum(
         pointer="paths",
         patch=_DEVICE_LOOKUP["paths"],

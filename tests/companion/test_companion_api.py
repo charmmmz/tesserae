@@ -121,6 +121,7 @@ def test_capabilities_probe_is_unauthenticated_and_valid(app: Flask) -> None:
     assert set(body["features"]) == {
         "devices",
         "device_setup",
+        "device_mode_observations",
         "dashboards",
         "dashboard_push",
         "image_push",
