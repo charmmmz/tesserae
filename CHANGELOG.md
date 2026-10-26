@@ -8,6 +8,10 @@ All notable changes to Tesserae are recorded here. Format loosely follows
 
 ### Added
 
+- Phone-confirmed Bluetooth battery and firmware readings appear in the existing
+  Devices columns. Readings persist across restarts and retain their observation
+  times; newer heartbeat values take precedence and reachability is unchanged.
+
 - Companion can resolve a MAC already obtained from an authenticated Bluetooth
   display via `POST /api/app/v1/devices/lookup` (`devices:read`). It returns only
   the unique matching device ID or null, without exposing MACs or firmware

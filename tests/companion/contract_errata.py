@@ -69,7 +69,7 @@ class SchemaErratum:
 ERRATA: tuple[Erratum, ...] = (
     Erratum(
         pointer="components/schemas/Capabilities/properties/features/items/enum",
-        values=("device_mode_observations",),
+        values=("device_mode_observations", "device_status_observations"),
         since="vNext (unreleased)",
         why="Local-first upload of confirmed iOS Bluetooth mode observations, without changing delivery gates.",
     ),

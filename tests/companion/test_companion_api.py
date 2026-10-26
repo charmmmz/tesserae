@@ -122,6 +122,7 @@ def test_capabilities_probe_is_unauthenticated_and_valid(app: Flask) -> None:
         "devices",
         "device_setup",
         "device_mode_observations",
+        "device_status_observations",
         "dashboards",
         "dashboard_push",
         "image_push",

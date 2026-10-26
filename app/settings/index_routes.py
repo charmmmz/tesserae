@@ -2199,18 +2199,20 @@ def _status_view(device: Device) -> dict[str, Any]:
     the parsed key/value pairs, humanized status tiles, the smart-sync
     telemetry summary, and a reconcile hint for the panel dims."""
     cache = device_status().get(device.id)
+    parsed, phone_readings = _phone_status_readings(device.id, cache)
     smart_sync = _smart_sync_view(device.id)
     base: dict[str, Any] = {
         "health": "unknown",
         "relative": "no heartbeat received yet",
         # Epoch seconds of the last heartbeat, for sorting lists by it.
         "seen_at": None,
-        "parsed": {},
-        "tiles": _status_tiles({}),
+        "parsed": parsed,
+        "phone_readings": phone_readings,
+        "tiles": _status_tiles(parsed),
         "smart_sync": smart_sync,
         "smart_sync_header": _smart_sync_header(smart_sync),
         "reported_panel_hint": None,
-        "firmware": _firmware_view(device, {}),
+        "firmware": _firmware_view(device, parsed),
         "ota": None,
         # Bound albums show even with no heartbeat on record: a binding that
         # has never reported is when you most need to see it, and the line
@@ -2226,7 +2228,6 @@ def _status_view(device: Device) -> dict[str, Any]:
         health = "warn"
     else:
         health = "stale"
-    parsed = cache.get("parsed", {})
     base.update(
         {
             "health": health,
@@ -2241,6 +2242,47 @@ def _status_view(device: Device) -> dict[str, Any]:
         }
     )
     return base
+
+
+def _phone_status_readings(
+    device_id: str, cache: dict[str, Any] | None
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Presentation only: phone readings never update heartbeat time or push gates."""
+    cache = cache or {}
+    parsed = dict(cache.get("parsed") or {})
+    observation = (current_app.config["DEVICE_FACTS"].get(device_id) or {}).get("mode_observation")
+    labels: dict[str, str] = {}
+    if not isinstance(observation, dict) or observation.get("source") != "ios_ble":
+        return parsed, labels
+    heartbeat_at = float(cache.get("received_at") or 0)
+    for field, key, parsed_key in (
+        ("battery", "percent", "battery_pct"),
+        ("firmware", "version", "fw_version"),
+    ):
+        reading = observation.get(field)
+        if not isinstance(reading, dict) or not isinstance(reading.get("observed_at"), str):
+            continue
+        value = reading.get(key)
+        if field == "battery":
+            if type(value) is not int or not 0 <= value <= 100:
+                continue
+        elif not isinstance(value, str) or not value.strip():
+            continue
+        try:
+            stamp = datetime.fromisoformat(reading["observed_at"].replace("Z", "+00:00"))
+            if stamp.tzinfo is None:
+                continue
+            if parsed.get(parsed_key) is not None and stamp.timestamp() <= heartbeat_at:
+                continue
+        except (ValueError, OverflowError, OSError):
+            continue
+        parsed[parsed_key] = value
+        # Avoid showing an older Wi-Fi voltage alongside a newer BLE percentage.
+        if field == "battery":
+            parsed.pop("battery_mv", None)
+            parsed.pop("power_plugged", None)
+        labels[field] = "Bluetooth · " + stamp.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    return parsed, labels
 
 
 # Reported playback state → pill colour for the Devices-card album line.

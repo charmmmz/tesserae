@@ -299,3 +299,42 @@ def test_connection_chips_link_to_the_firmware_page(app: Flask, monkeypatch) -> 
     assert 'href="https://github.com/example/firmware/releases/tag/v1.40.0"' in chips
     assert "release notes" in chips
     assert "Faster wakes" in chips
+
+
+def test_phone_telemetry_fills_existing_columns_without_changing_heartbeat(app: Flask) -> None:
+    from app.state.device_facts import DeviceFactsStore
+
+    client = app.test_client()
+    _sign_in(client)
+    dev = _add(client)
+    report = {
+        "mode": "bluetooth",
+        "source": "ios_ble",
+        "observed_at": "2026-01-02T03:04:05Z",
+        "battery": {"percent": 65, "observed_at": "2026-01-02T03:04:06Z"},
+        "firmware": {"version": "0.9.11", "observed_at": "2026-01-02T03:04:04Z"},
+    }
+    app.config["DEVICE_FACTS"].record_mode_observation(dev, report)
+    # Reopen persisted facts, as after container recreation.
+    app.config["DEVICE_FACTS"] = DeviceFactsStore(app.config["DEVICE_FACTS"]._path)
+    for path in ("/settings/devices", f"/settings/devices/{dev}"):
+        body = client.get(path).get_data(as_text=True)
+        assert "65%" in body and "v0.9.11" in body
+    assert dev not in app.config["DEVICE_STATUS"]
+    body = client.get("/settings/devices").get_data(as_text=True)
+    assert "no heartbeat yet" in body and 'title="Bluetooth · ' in body
+    # New Wi-Fi heartbeats win without modifying the persisted phone evidence.
+    app.config["DEVICE_STATUS"][dev] = {
+        "received_at": time.time(),
+        "parsed": {"battery_pct": 70, "fw_version": "0.9.12"},
+    }
+    body = client.get("/settings/devices").get_data(as_text=True)
+    assert "70%" in body and "v0.9.12" in body
+    assert "65%" not in body and "v0.9.11" not in body
+    # A newer phone reading supersedes older Wi-Fi data, including battery 0%.
+    app.config["DEVICE_STATUS"][dev]["received_at"] = 1
+    body = client.get("/settings/devices").get_data(as_text=True)
+    assert "65%" in body and "v0.9.11" in body
+    report["battery"] = {"percent": 0, "observed_at": "2026-01-02T03:04:07Z"}
+    app.config["DEVICE_FACTS"].record_mode_observation(dev, report)
+    assert "0%" in client.get("/settings/devices").get_data(as_text=True)
